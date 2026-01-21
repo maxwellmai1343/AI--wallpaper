@@ -16,7 +16,9 @@
       "identifier": "fs:allow-read",
       "allow": [
         { "path": "$PICTURES/ai-wallpaper-app/*" },
-        { "path": "$PICTURES/ai-wallpaper-app/**" }
+        { "path": "$PICTURES/ai-wallpaper-app/**" },
+        { "path": "$HOME/Pictures/ai-wallpaper-app/*" },
+        { "path": "$HOME/Pictures/ai-wallpaper-app/**" }
       ]
     }
   ]
