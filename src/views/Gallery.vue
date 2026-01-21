@@ -60,9 +60,13 @@ function getImageUrl(path: string) {
   // Note: On Windows it might need another slash if it starts with drive letter, 
   // but our Rust protocol handler handles /C:/...
   
-  // For macOS/Linux, if the path starts with /, we can just append it.
-  // The result will be wallpaper-image://localhost/Users/... which parses to host=localhost, path=/Users/...
-  return `wallpaper-image://localhost${encodedPath.startsWith('/') ? '' : '/'}${encodedPath}`;
+  // For Windows, we need the path to look like wallpaper-image://localhost/C:/Users/...
+  // For macOS, we need wallpaper-image://localhost/Users/...
+  // The Rust side expects the path part of the URL to be the absolute file path.
+  // URL path always starts with /
+  
+  const separator = encodedPath.startsWith('/') ? '' : '/';
+  return `wallpaper-image://localhost${separator}${encodedPath}`;
 }
 
 function handleImageError(e: Event) {

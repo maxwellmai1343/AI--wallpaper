@@ -177,17 +177,14 @@ pub fn run() {
             let decoded_path = percent_encoding::percent_decode_str(path_str).decode_utf8_lossy();
             
             // Handle Windows path (remove leading slash if it looks like /C:/...)
-            let path_to_read = if cfg!(windows) && decoded_path.starts_with('/') {
-                &decoded_path[1..]
+            let path_to_read = if cfg!(windows) {
+                 if decoded_path.starts_with('/') {
+                     &decoded_path[1..]
+                 } else {
+                     &decoded_path
+                 }
             } else {
-                // For macOS/Linux, we need to ensure it's treated as an absolute path
-                // If path_str starts with "localhost", we should ignore it if it was added by the frontend
-                if decoded_path.starts_with("localhost") {
-                     // This shouldn't happen with our frontend logic but good for safety
-                     &decoded_path[9..] 
-                } else {
-                    &decoded_path
-                }
+                &decoded_path
             };
             
             let file_path = PathBuf::from(path_to_read.to_string());
