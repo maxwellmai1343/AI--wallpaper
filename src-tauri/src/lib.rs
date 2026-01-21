@@ -8,7 +8,22 @@ use chrono::Utc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 
+use tauri::http::{Response, StatusCode};
+use std::fs;
+use std::path::PathBuf;
+
 const APP_PASSWORD: &str = "123456";
+
+fn get_mime_type(path: &PathBuf) -> String {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png".to_string(),
+        Some("jpg") | Some("jpeg") => "image/jpeg".to_string(),
+        Some("gif") => "image/gif".to_string(),
+        Some("svg") => "image/svg+xml".to_string(),
+        Some("webp") => "image/webp".to_string(),
+        _ => "application/octet-stream".to_string(),
+    }
+}
 
 #[tauri::command]
 fn verify_password(password: String) -> bool {
@@ -154,6 +169,43 @@ fn set_storage_path(path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_uri_scheme_protocol("wallpaper-image", |_, request| {
+            let uri = request.uri();
+            let path_str = uri.path();
+            
+            // URL decode
+            let decoded_path = percent_encoding::percent_decode_str(path_str).decode_utf8_lossy();
+            
+            // Handle Windows path (remove leading slash if it looks like /C:/...)
+            let path_to_read = if cfg!(windows) && decoded_path.starts_with('/') {
+                &decoded_path[1..]
+            } else {
+                &decoded_path
+            };
+            
+            let file_path = PathBuf::from(path_to_read.to_string());
+            println!("Protocol reading: {:?}", file_path);
+
+            match fs::read(&file_path) {
+                Ok(data) => {
+                    let mime_type = get_mime_type(&file_path);
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .header("Content-Type", mime_type)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(data)
+                        .unwrap()
+                },
+                Err(e) => {
+                    println!("Protocol read error: {}", e);
+                    Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body("File not found".as_bytes().to_vec())
+                        .unwrap()
+                }
+            }
+        })
         .setup(|app| {
             // 创建退出菜单项
             let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;

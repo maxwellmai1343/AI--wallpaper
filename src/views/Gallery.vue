@@ -45,7 +45,21 @@ async function clearCache() {
 }
 
 function getImageUrl(path: string) {
-  return convertFileSrc(path);
+  // Use custom protocol
+  // Need to handle Windows paths and encode properly
+  // Example: wallpaper-image://localhost/Users/xiaomai/...
+  
+  // Normalize path separators (mostly for Windows consistency)
+  const normalizedPath = path.replace(/\\/g, '/');
+  
+  // Encode path segments to handle spaces and special chars
+  // Note: We don't want to encode the slashes that are part of the path structure
+  const encodedPath = normalizedPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  
+  // Add protocol
+  // Note: On Windows it might need another slash if it starts with drive letter, 
+  // but our Rust protocol handler handles /C:/...
+  return `wallpaper-image://localhost${encodedPath.startsWith('/') ? '' : '/'}${encodedPath}`;
 }
 
 function handleImageError(e: Event) {
