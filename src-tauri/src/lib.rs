@@ -180,7 +180,14 @@ pub fn run() {
             let path_to_read = if cfg!(windows) && decoded_path.starts_with('/') {
                 &decoded_path[1..]
             } else {
-                &decoded_path
+                // For macOS/Linux, we need to ensure it's treated as an absolute path
+                // If path_str starts with "localhost", we should ignore it if it was added by the frontend
+                if decoded_path.starts_with("localhost") {
+                     // This shouldn't happen with our frontend logic but good for safety
+                     &decoded_path[9..] 
+                } else {
+                    &decoded_path
+                }
             };
             
             let file_path = PathBuf::from(path_to_read.to_string());
