@@ -26,8 +26,20 @@ struct History {
 }
 
 pub fn get_app_dir() -> PathBuf {
-    // 强制使用 /tmp 目录进行测试，绕过沙箱限制
-    Path::new("/tmp").join("ai-wallpaper-app")
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 开发环境沙箱限制，临时使用 /tmp
+        Path::new("/tmp").join("ai-wallpaper-app")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows 和 Linux 使用标准数据目录
+        if let Some(data_dir) = dirs::data_local_dir() {
+            return data_dir.join("ai-wallpaper-app");
+        }
+        // 回退到临时目录
+        std::env::temp_dir().join("ai-wallpaper-app")
+    }
 }
 
 pub fn save_image(id: &str, data: &[u8]) -> Result<String, String> {
