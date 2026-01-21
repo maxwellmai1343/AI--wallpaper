@@ -1,20 +1,27 @@
 mod ai;
 mod storage;
 
-use crate::ai::{MockAiAdapter, AiApiAdapter};
+use crate::ai::{MockAiAdapter, AiApiAdapter, OpenAiAdapter};
 use crate::storage::{WallpaperRecord, Resolution};
 use uuid::Uuid;
 use chrono::Utc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
 
 #[tauri::command]
-async fn generate_wallpaper(prompt: String, width: u32, height: u32) -> Result<String, String> {
-    println!("Frontend called generate_wallpaper: prompt={}, size={}x{}", prompt, width, height);
+async fn generate_wallpaper(prompt: String, width: u32, height: u32, api_key: String, model: String) -> Result<String, String> {
+    println!("Frontend called generate_wallpaper: prompt={}, size={}x{}, model={}", prompt, width, height, model);
     
-    let adapter = MockAiAdapter;
-    let image_data = adapter.generate_image(&prompt, width, height).await?;
+    let image_data = if api_key.is_empty() {
+        println!("No API Key provided, using Mock Adapter");
+        let adapter = MockAiAdapter;
+        adapter.generate_image(&prompt, width, height).await?
+    } else {
+        println!("API Key provided, using OpenAiAdapter");
+        let adapter = OpenAiAdapter { api_key, model };
+        adapter.generate_image(&prompt, width, height).await?
+    };
+
     println!("Image generated, size: {} bytes", image_data.len());
     
     let id = Uuid::new_v4().to_string();
@@ -60,49 +67,7 @@ fn get_screen_resolution(window: tauri::Window) -> Result<(u32, u32), String> {
 async fn set_wallpaper(image_path: String) -> Result<(), String> {
     println!("尝试设置壁纸，路径: {}", image_path);
 
-    // 尝试多种方法设置壁纸
-    
-    // 方法1: 使用 macOS AppleScript (通常最可靠)
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        println!("使用 AppleScript 设置壁纸...");
-        
-        // 使用 Finder 而不是 System Events，通常权限要求更低
-        let script = format!(
-            "tell application \"Finder\" to set desktop picture to POSIX file \"{}\"",
-            image_path
-        );
-        
-        match Command::new("osascript").arg("-e").arg(&script).output() {
-            Ok(output) => {
-                if output.status.success() {
-                    println!("AppleScript (Finder) 设置成功");
-                    return Ok(());
-                } else {
-                    let error = String::from_utf8_lossy(&output.stderr);
-                    println!("AppleScript (Finder) 设置失败: {}", error);
-                    
-                    // 再次尝试 System Events，但这次使用 POSIX file 格式
-                     let script_sys = format!(
-                        "tell application \"System Events\" to set picture of every desktop to POSIX file \"{}\"",
-                        image_path
-                    );
-                    if let Ok(out_sys) = Command::new("osascript").arg("-e").arg(&script_sys).output() {
-                        if out_sys.status.success() {
-                             println!("AppleScript (System Events) 设置成功");
-                             return Ok(());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                println!("执行 AppleScript 错误: {}", e);
-            }
-        }
-    }
-
-    // 方法2: 使用 wallpaper crate
+    // 使用 wallpaper crate 设置壁纸 (跨平台，支持 Windows)
     println!("使用 wallpaper crate 设置壁纸...");
     match wallpaper::set_from_path(&image_path) {
         Ok(_) => {
@@ -116,17 +81,17 @@ async fn set_wallpaper(image_path: String) -> Result<(), String> {
             let err_msg = format!("自动设置壁纸失败: {}", e);
             println!("{}", err_msg);
             
-            // Fallback: 如果自动设置失败（通常是权限问题），则在 Finder 中显示该文件
-            println!("尝试在 Finder 中显示文件...");
-            #[cfg(target_os = "macos")]
+            // Windows Fallback: 尝试在资源管理器中打开
+            println!("尝试在资源管理器中显示文件...");
+            #[cfg(target_os = "windows")]
             {
-                let _ = std::process::Command::new("open")
-                    .arg("-R")
+                let _ = std::process::Command::new("explorer")
+                    .arg("/select,")
                     .arg(&image_path)
                     .output();
             }
             
-            Err(format!("由于 macOS 权限限制，无法自动设置壁纸。已为您在 Finder 中打开图片，请右键手动设置为桌面背景。"))
+            Err(format!("无法自动设置壁纸。已为您在文件管理器中打开图片，请右键手动设置为桌面背景。"))
         }
     }
 }
@@ -139,6 +104,44 @@ fn get_wallpaper_history() -> Result<Vec<WallpaperRecord>, String> {
 #[tauri::command]
 fn clear_cache() -> Result<(), String> {
     storage::clear_cache()
+}
+
+#[tauri::command]
+async fn import_image(file_path: String) -> Result<String, String> {
+    println!("Importing image from: {}", file_path);
+    
+    // 读取原始图片文件
+    let data = std::fs::read(&file_path).map_err(|e| format!("Failed to read file at {}: {}", file_path, e))?;
+    
+    // 生成新的ID并保存到应用缓存
+    let id = Uuid::new_v4().to_string();
+    let saved_path = storage::save_image(&id, &data).map_err(|e| format!("Failed to save image: {}", e))?;
+    
+    // 获取图片尺寸 (简单起见，这里先假设为屏幕尺寸，或者使用默认值)
+    // 在生产环境中，应该使用 image crate 读取实际尺寸
+    let (width, height) = (1920, 1080);
+    
+    let record = WallpaperRecord {
+        id,
+        prompt: "Imported Image".to_string(),
+        image_path: saved_path.clone(),
+        created_at: Utc::now().timestamp_millis(),
+        resolution: Resolution { width, height },
+    };
+    
+    storage::save_record(record).map_err(|e| format!("Failed to save record: {}", e))?;
+    
+    Ok(saved_path)
+}
+
+#[tauri::command]
+fn get_storage_path() -> Result<String, String> {
+    Ok(storage::get_storage_dir().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn set_storage_path(path: String) -> Result<(), String> {
+    storage::set_custom_storage_dir(path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -166,12 +169,16 @@ pub fn run() {
         })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             generate_wallpaper,
             get_screen_resolution,
             set_wallpaper,
             get_wallpaper_history,
-            clear_cache
+            clear_cache,
+            import_image,
+            get_storage_path,
+            set_storage_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
