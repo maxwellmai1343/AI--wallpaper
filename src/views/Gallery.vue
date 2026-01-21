@@ -45,28 +45,7 @@ async function clearCache() {
 }
 
 function getImageUrl(path: string) {
-  // Use custom protocol
-  // Need to handle Windows paths and encode properly
-  // Example: wallpaper-image://localhost/Users/xiaomai/...
-  
-  // Normalize path separators (mostly for Windows consistency)
-  const normalizedPath = path.replace(/\\/g, '/');
-  
-  // Encode path segments to handle spaces and special chars
-  // Note: We don't want to encode the slashes that are part of the path structure
-  const encodedPath = normalizedPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  
-  // Add protocol
-  // Note: On Windows it might need another slash if it starts with drive letter, 
-  // but our Rust protocol handler handles /C:/...
-  
-  // For Windows, we need the path to look like wallpaper-image://localhost/C:/Users/...
-  // For macOS, we need wallpaper-image://localhost/Users/...
-  // The Rust side expects the path part of the URL to be the absolute file path.
-  // URL path always starts with /
-  
-  const separator = encodedPath.startsWith('/') ? '' : '/';
-  return `wallpaper-image://localhost${separator}${encodedPath}`;
+  return convertFileSrc(path);
 }
 
 function handleImageError(e: Event) {
