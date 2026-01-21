@@ -48,6 +48,18 @@ function getImageUrl(path: string) {
   return convertFileSrc(path);
 }
 
+function handleImageError(e: Event) {
+  const target = e.target as HTMLImageElement;
+  target.style.display = 'none'; // Hide broken image
+  target.parentElement?.classList.add('bg-red-900'); // Add error indicator to container
+  // Add a text indicator
+  const span = document.createElement('span');
+  span.innerText = '⚠️ 无法加载图片';
+  span.className = 'text-red-400 text-xs absolute inset-0 flex items-center justify-center';
+  target.parentElement?.appendChild(span);
+  console.error('Image load failed:', target.src);
+}
+
 onMounted(async () => {
   fetchHistory();
   
@@ -132,6 +144,7 @@ onUnmounted(() => {
           <div class="aspect-video relative overflow-hidden cursor-pointer" @click="setWallpaper(item.imagePath)">
              <img 
                :src="getImageUrl(item.imagePath)" 
+               @error="handleImageError"
                class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" 
                alt="壁纸预览" 
              />

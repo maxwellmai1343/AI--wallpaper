@@ -8,6 +8,13 @@ use chrono::Utc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 
+const APP_PASSWORD: &str = "123456";
+
+#[tauri::command]
+fn verify_password(password: String) -> bool {
+    password == APP_PASSWORD
+}
+
 #[tauri::command]
 async fn generate_wallpaper(prompt: String, width: u32, height: u32, api_key: String, model: String) -> Result<String, String> {
     println!("Frontend called generate_wallpaper: prompt={}, size={}x{}, model={}", prompt, width, height, model);
@@ -178,7 +185,8 @@ pub fn run() {
             clear_cache,
             import_image,
             get_storage_path,
-            set_storage_path
+            set_storage_path,
+            verify_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
